@@ -6,6 +6,10 @@ const fs = require('fs');
 
 const db = require('./db');
 const { enqueueJob, runJob } = require('./job-runner');
+const openclawTools = require('./openclaw-tools');
+const w24Handler = require('./w24-handler');
+const zaiVision = require('./zai-vision-mcp');
+const hardening = require('./production-hardening');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -22,7 +26,7 @@ app.use(express.json());
 // ─── Health ───────────────────────────────────────────────────────
 
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', version: '0.7.0', timestamp: new Date().toISOString() });
+  res.json({ status: 'ok', version: '0.8.0', phase: '3', timestamp: new Date().toISOString() });
 });
 
 // ─── Projects ───────────────────────────────────────────────────────
@@ -157,38 +161,146 @@ app.patch('/api/jobs/:id', async (req, res) => {
   }
 });
 
-// ─── Kitchen Tools (OpenClaw Integration) ─────────────────────────
+// ─── OpenClaw Agent Tools ─────────────────────────────────────────
 
-app.post('/api/kitchen/tools/:tool', async (req, res) => {
+app.post('/api/tools/:tool', async (req, res) => {
   try {
-    const { project_id, recipe_id, params } = req.body;
     const tool = req.params.tool;
+    const params = req.body;
+    
+    const result = await openclawTools.executeTool(tool, params);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
 
-    const validTools = ['detect-scenes', 'score', 'plate', 'season', 'qc', 'auto'];
-    if (!validTools.includes(tool)) {
-      return res.status(400).json({ error: `Unknown tool: ${tool}. Valid: ${validTools.join(', ')}` });
+app.get('/api/tools', (req, res) => {
+  res.json({
+    tools: Object.keys(openclawTools.TOOL_DEFINITIONS).map(key => ({
+      name: key,
+      ...openclawTools.TOOL_DEFINITIONS[key]
+    }))
+  });
+});
+
+// ─── Webhook Callbacks ────────────────────────────────────────────
+
+app.post('/api/webhooks/job-complete', async (req, res) => {
+  try {
+    const signature = req.headers['x-webhook-signature'];
+    const result = await openclawTools.handleWebhook(req.body, signature);
+    res.json(result);
+  } catch (err) {
+    res.status(401).json({ error: err.message });
+  }
+});
+
+// ─── W24 Integration ────────────────────────────────────────────
+
+app.post('/api/w24/parse', (req, res) => {
+  try {
+    const { url } = req.body;
+    const info = w24Handler.parseW24Url(url);
+    res.json(info);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/w24/download', async (req, res) => {
+  try {
+    const { url, output_dir } = req.body;
+    const PROJECTS_DIR = process.env.PROJECTS_BASE_DIR || path.join(__dirname, '..', 'projects');
+    const dir = output_dir || path.join(PROJECTS_DIR, 'w24-downloads');
+    
+    const result = await w24Handler.downloadW24Video(url, dir);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/w24/metadata', async (req, res) => {
+  try {
+    const { url } = req.body;
+    const result = await w24Handler.getW24Metadata(url);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── zai-vision Integration ───────────────────────────────────────
+
+app.post('/api/vision/analyze', async (req, res) => {
+  try {
+    const { video_path, options } = req.body;
+    const result = await zaiVision.analyzeVideo(video_path, options);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/vision/feed-scoring', async (req, res) => {
+  try {
+    const { project_id, analysis } = req.body;
+    const result = await zaiVision.feedIntoScoring(project_id, analysis);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── Progress Streaming (SSE) ─────────────────────────────────────
+
+app.get('/api/jobs/:id/progress', (req, res) => {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  
+  const jobId = req.params.id;
+  
+  const sendProgress = (update) => {
+    if (update.job_id === jobId) {
+      res.write(`data: ${JSON.stringify(update)}\n\n`);
     }
+  };
+  
+  hardening.progressEmitter.on('progress', sendProgress);
+  
+  req.on('close', () => {
+    hardening.progressEmitter.off('progress', sendProgress);
+  });
+});
 
-    // Map tool names to job types
-    const toolToType = {
-      'detect-scenes': 'prep',
-      'score': 'analyze',
-      'plate': 'plate',
-      'season': 'season',
-      'qc': 'qc',
-      'auto': 'auto'
-    };
+// ─── Output Gallery ───────────────────────────────────────────────
 
-    const job = await db.createJob({
-      id: uuidv4().slice(0, 8),
-      project_id,
-      type: toolToType[tool],
-      status: 'queued',
-      recipe_id,
-      params: params || {}
-    });
+app.get('/api/projects/:id/gallery', async (req, res) => {
+  try {
+    const gallery = await hardening.getOutputGallery(req.params.id);
+    res.json(gallery);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 
-    res.status(201).json({ job_id: job.id, status: 'queued', tool });
+// ─── Cleanup ──────────────────────────────────────────────────────
+
+app.post('/api/projects/:id/cleanup', async (req, res) => {
+  try {
+    const result = await hardening.cleanupProject(req.params.id, req.body);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/admin/cleanup-all', async (req, res) => {
+  try {
+    const result = await hardening.cleanupOldTempFiles();
+    res.json(result);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -247,7 +359,8 @@ app.get('/api/recipes/:id', async (req, res) => {
 // ─── Start ────────────────────────────────────────────────────────
 
 app.listen(PORT, () => {
-  console.log(`Video Kitchen API v0.7.0 running on http://localhost:${PORT}`);
+  console.log(`Video Kitchen API v0.8.0 running on http://localhost:${PORT}`);
+  console.log(`Phase 3: Agent Integration enabled`);
   console.log(`Projects dir: ${PROJECTS_DIR}`);
 });
 

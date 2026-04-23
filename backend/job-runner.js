@@ -1,6 +1,7 @@
 const { spawn } = require('child_process');
 const path = require('path');
 const db = require('./db');
+const hardening = require('./production-hardening');
 
 const PROJECTS_DIR = process.env.PROJECTS_BASE_DIR || path.join(__dirname, '..', 'projects');
 const SCRIPTS_DIR = process.env.KITCHEN_SCRIPTS_DIR || path.join(__dirname, '..', 'scripts');
@@ -29,9 +30,12 @@ async function processQueue() {
   const job = jobQueue.shift();
   
   try {
-    await runJob(job);
+    // Use retry logic for production hardening
+    await hardening.runWithRetry(job.id, async () => {
+      await runJob(job);
+    });
   } catch (err) {
-    console.error(`[QUEUE] Job ${job.id} failed:`, err.message);
+    console.error(`[QUEUE] Job ${job.id} failed after retries:`, err.message);
   } finally {
     isProcessing = false;
     // Process next if available
@@ -90,10 +94,17 @@ async function runJob(job) {
     });
 
     let logs = '';
-    proc.stdout.on('data', (data) => {
+    proc.stdout.on('data', async (data) => {
       const chunk = data.toString();
       logs += chunk;
       console.log(`[JOB ${job.id}] ${chunk.trim()}`);
+      
+      // Parse progress from output and report
+      const progressMatch = chunk.match(/Progress: (\d+)%/);
+      if (progressMatch) {
+        const progress = parseInt(progressMatch[1]);
+        await hardening.reportProgress(job.id, job.type, progress, chunk.trim());
+      }
     });
     proc.stderr.on('data', (data) => {
       const chunk = data.toString();
@@ -114,6 +125,21 @@ async function runJob(job) {
 
       // Sync outputs
       await syncOutputs(job);
+      
+      // Generate thumbnails for new outputs
+      const outputsDir = path.join(PROJECTS_DIR, job.project_id, 'outputs');
+      if (fs.existsSync(outputsDir)) {
+        const files = fs.readdirSync(outputsDir).filter(f => f.endsWith('.mp4'));
+        for (const file of files) {
+          const filePath = path.join(outputsDir, file);
+          await hardening.generateThumbnail(filePath, outputsDir);
+          await hardening.generatePreviewGif(filePath, outputsDir);
+        }
+      }
+      
+      // Report final progress
+      await hardening.reportProgress(job.id, job.type, code === 0 ? 100 : 0, 
+        code === 0 ? 'Completed successfully' : `Failed with code ${code}`);
 
       console.log(`[JOB ${job.id}] Completed with status: ${status}`);
       
