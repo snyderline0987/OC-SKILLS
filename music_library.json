@@ -1,0 +1,27 @@
+{
+  "version": "1.0",
+  "library_name": "FFWD Trailer Kitchen Music Library",
+  "tracks": [
+    {
+      "id": "shelter_to_the_valley",
+      "title": "Shelter",
+      "artist": "To The Valley",
+      "file": "music_library/shelter_to_the_valley.mp3",
+      "mood": "epic",
+      "bpm_range": [100, 130],
+      "energy": "high",
+      "duration_seconds": 30,
+      "tags": ["cinematic", "trailer", "orchestral", "dramatic"],
+      "default_volume": 0.1,
+      "default_position": "background"
+    }
+  ],
+  "moods": {
+    "epic": ["shelter_to_the_valley"],
+    "dramatic": ["shelter_to_the_valley"],
+    "upbeat": [],
+    "chill": [],
+    "suspense": [],
+    "news": []
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "recipe": "spicy_trailer",
+  "name": "Spicy Trailer",
+  "target_duration": "30-45s",
+  "scene_count": "5-8",
+  "scene_selection": "auto_highlights",
+  "music_mood": "epic",
+  "music_bpm": "100-130",
+  "vo_style": "dramatic",
+  "aspect_ratio": "16:9",
+  "transitions": "crossfade",
+  "plating_notes": [
+    "Build tension with ascending energy",
+    "Crossfade transitions (0.3s)",
+    "Use dramatic pause before climax",
+    "End with impact frame"
+  ]
+}

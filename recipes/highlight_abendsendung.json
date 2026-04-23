@@ -1,0 +1,18 @@
+{
+  "recipe": "highlight_abendsendung",
+  "name": "Highlight Abendsendung",
+  "target_duration": "60-90s",
+  "scene_count": "6-12",
+  "scene_selection": "auto_highlights",
+  "music_mood": "professional",
+  "music_bpm": "90-110",
+  "vo_style": "professional",
+  "aspect_ratio": "16:9",
+  "transitions": "cut",
+  "plating_notes": [
+    "News-style highlight package",
+    "Include anchor intros if available",
+    "Lower thirds for context",
+    "Professional, broadcast quality"
+  ]
+}

@@ -1,0 +1,18 @@
+{
+  "recipe": "bts_soup",
+  "name": "Behind the Scenes Soup",
+  "target_duration": "45-60s",
+  "scene_count": "5-8",
+  "scene_selection": "random_diverse",
+  "music_mood": "chill",
+  "music_bpm": "80-100",
+  "vo_style": "conversational",
+  "aspect_ratio": "1:1",
+  "transitions": "crossfade",
+  "plating_notes": [
+    "Relaxed, behind-the-scenes vibe",
+    "Include candid moments",
+    "Crossfade transitions",
+    "Instagram-friendly square format"
+  ]
+}

@@ -1,0 +1,19 @@
+{
+  "recipe": "social_teaser_w24",
+  "name": "Social Media Teaser für W24",
+  "target_duration": "20-30s",
+  "scene_count": "3-5",
+  "scene_selection": "auto_highlights",
+  "music_mood": "upbeat",
+  "music_bpm": "120-140",
+  "vo_style": "punchy",
+  "aspect_ratio": "9:16",
+  "captions": true,
+  "transitions": "quick_cuts",
+  "plating_notes": [
+    "Start with strongest visual (hook in 3s)",
+    "End with call-to-action or logo",
+    "Quick cuts (0.5-2s per scene)",
+    "Text overlays for context"
+  ]
+}
